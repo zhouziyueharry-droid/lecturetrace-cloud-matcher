@@ -141,7 +141,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(400, {'error': 'Invalid image, snapshot or evidence version'})
         except Exception as error:
             print(json.dumps({'event': 'matcher_failed', 'type': type(error).__name__, 'http_status': getattr(error, 'code', None)}), flush=True)
-            self.reply(502, {'error': 'Course assets unavailable; retry shortly'})
+            self.reply(502, {'error': 'Course assets unavailable; retry shortly', 'failure_type': type(error).__name__, 'upstream_status': getattr(error, 'code', None)})
         finally:
             LOCK.release()
 
