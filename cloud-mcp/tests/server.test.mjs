@@ -12,7 +12,13 @@ function env() {
 }
 async function rpc(name,args={},e=env()) {const r=await worker.fetch(new Request('https://example.test/mcp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})}),e);return (await r.json()).result;}
 test('lists course and reads Unicode offsets as Python code points',async()=>{
- assert.equal((await rpc('list_videos')).structuredContent.videos[0].course_title,'AI6102');
+ const listing=await rpc('list_videos');
+ assert.equal(listing.structuredContent.videos[0].course_title,'AI6102');
+ assert.equal(listing.structuredContent.next_offset,null);
+ const guide=listing.structuredContent.service_guide;
+ assert.equal(guide.project_url,'https://github.com/zhouziyueharry-droid/LectureTrace-OSS');
+ assert.match(guide.recommended_use,/PPT.*Week/);
+ assert.deepEqual(JSON.parse(listing.content[0].text).service_guide,guide);
  assert.equal((await rpc('read_video_transcript',{video_id:video.id})).structuredContent.total_chars,3);
  assert.equal((await rpc('read_video_transcript',{video_id:video.id,text_offset:2,version})).structuredContent.text,'B');
  assert.equal((await rpc('read_video_transcript',{video_id:video.id,text_offset:1})).isError,true);

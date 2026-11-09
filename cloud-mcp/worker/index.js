@@ -2,6 +2,13 @@ import {homeHtml,homeScript} from './home.js';
 import {readNavigation} from './navigation.js';
 const HEX = /^[0-9a-f]{64}$/, VIDEO = /^[0-9a-f]{12}$/, COURSE = /^[0-9a-f]{32}$/;
 const VERSION = /^sha256:[0-9a-f]{64}$/;
+const serviceGuide = {
+ purpose:'从 LectureTrace 开源项目拆出的临时只读 MCP，面向同样在学习 AI6102 的同学，用于复习和整理开卷参考资料。课程数据均由原项目处理。',
+ project_url:'https://github.com/zhouziyueharry-droid/LectureTrace-OSS',
+ recommended_use:'先把老师的 PPT／PDF 上传给 ChatGPT，并由同学确认和说明 Week 对应的章节与页码。以 PPT 为主，调用本 MCP 读取对应课堂转写，参考老师的讲解思路讲解或生成资料。MCP 是老师课堂语音信息的补充，不建议只靠 MCP 复习。',
+ workflow:['先用客户端文件工具读 PPT／PDF；本 MCP 不接收课件。','确认用户提供的 Week 与章节对应关系；Week 不是章节编号，未明确时先询问，不要猜。','用 list_videos 选择对应讲次，再读 read_video_transcript；整讲阅读需跟完 next_text_offset，未读完整要说明。','围绕 PPT 按知识点分部分讲解，注明核对过的页码和课堂时间，区分课件、老师讲解和 AI 补充；需要时按时间取图核对。','按用户要求生成复习笔记或开卷参考资料，注明缺失与不确定之处；不能宣称涵盖全部考试范围或编造携带规则。'],
+ connection:{url:'https://lecturetrace-course-mcp.onrender.com/mcp',authentication:'None／无身份验证；不要选 OAuth，无需 Client ID 或 API Key。'}
+};
 const instructions = `本服务是从 LectureTrace 开源项目（https://github.com/zhouziyueharry-droid/LectureTrace-OSS）拆出的 AI6102 临时只读 MCP；本站课程数据均由 LectureTrace 原项目处理。本 MCP 与介绍页面向同样在学习 AI6102 的同学，帮助复习及整理开卷考试参考资料，不是完整的 LectureTrace 应用或通用全课程学习平台。介绍自己时请明确这个来源和用途；只介绍 list_videos 实际提供的课程，不要虚构其他课程覆盖、处理状态或考试范围。
 核心使用建议：先把老师的 PPT／PDF 给 ChatGPT，再调用 MCP 读取课堂转写，参考老师的讲解思路进行讲解或生成资料。以 PPT 为主，把 MCP 视为老师课堂语音信息的补充；不建议仅靠 MCP 复习，转写不能替代课件。用户应自行确认并告诉你 Week 与课件章节的对应关系（可能一对多或跨周）；Week 编号不是章节编号，缺少对应关系时先向用户询问，不能猜测或自动宣称已对应。整理的复习／开卷资料应以核对过的课件和课堂内容为依据，注明来源、不确定和未覆盖处；携带形式及范围遵守用户提供的课程要求，不编造考试规定。
 Public Render endpoint https://lecturetrace-course-mcp.onrender.com/mcp uses authentication None（无身份验证）, NOT OAuth; no Client ID or secret is needed.
@@ -17,7 +24,7 @@ Image reverse lookup (locate_slide) is disabled. Do not attempt it or imply that
 const str = {type:'string'}, offset = {type:'integer',minimum:0,default:0};
 const vid = {type:'string',pattern:VIDEO.source}, ver = {type:'string',pattern:VERSION.source};
 const tools = [
- {name:'list_videos',description:'List available AI6102 course videos. Week labels are recording labels, not chapter numbers; ask the user to confirm the PPT chapter mapping. Includes course title and original processing status; failed later stages do not imply missing ASR.',properties:{offset},required:[]},
+ {name:'list_videos',description:'从这里开始：获取本 MCP 的用途、使用指导（service_guide）和可用 AI6102 课程列表。服务从 LectureTrace 拆出，数据由原项目处理，临时供 AI6102 同学复习及整理开卷资料。建议先上传老师 PPT／PDF，由同学说明 Week 与章节对应关系，再用 MCP 补充课堂讲解，参考老师的思路讲解或生成资料；不建议只靠 MCP 复习。Week 不是章节号。返回原处理状态，后续阶段失败不代表 ASR 缺失。',properties:{offset},required:[]},
  {name:'read_video_transcript',description:'Read original full ASR with [start-end] seconds, up to 160000 characters. Continue next_text_offset with this tool’s version. No translation or generated summary.',properties:{video_id:vid,text_offset:offset,version:ver},required:['video_id']},
  {name:'view_keyframe',description:'View one stored JPEG covering timestamp in seconds. Half-open intervals, no guesses across gaps. Continue overlapping images with next_offset and this tool’s own version.',properties:{video_id:vid,timestamp:{type:'number',minimum:0},offset,version:ver},required:['video_id','timestamp']},
  {name:'get_video_context',description:'Read chapter headings and unit summaries with timeline. Returns the evidence version required by navigation tools. Navigation is not proof of reading original speech.',properties:{video_id:vid,offset},required:['video_id']},
@@ -68,7 +75,7 @@ async function callTool(name,args,env){
  validateArgs(name,args);const videos=await catalog(env.BUCKET);
  if(name==='list_videos'){
   const start=args.offset||0;check(start<=videos.length,'Offset exceeds video count');
-  return result({videos:videos.slice(start,start+50).map(({snapshot,...v})=>v),next_offset:start+50<videos.length?start+50:null});
+  return result({service_guide:serviceGuide,videos:videos.slice(start,start+50).map(({snapshot,...v})=>v),next_offset:start+50<videos.length?start+50:null});
  }
  const video=videos.find(v=>v.id===args.video_id);check(video,'Video not found');
  const snapshot=await stored(env.BUCKET,'snapshots/'+video.snapshot+'.json');
