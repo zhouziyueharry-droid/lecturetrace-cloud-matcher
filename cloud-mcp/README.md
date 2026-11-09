@@ -24,12 +24,12 @@
 - 类型：Streamable HTTP（流式 HTTP）。
 - **身份验证选 None／无身份验证，不要选 OAuth。** 如果界面默认是 OAuth，需要手动切换。
 - 不需要 OAuth Client ID、Client Secret、Bearer token 或 API Key；相关字段留空。
-- 在 ChatGPT 添加自定义 MCP 服务器，创建后确认九个只读工具，再在聊天中选择或 @ 提及该插件。仅在 Codex 添加只供相应客户端使用。
+- 在 ChatGPT 添加自定义 MCP 服务器，创建后确认十个只读工具，再在聊天中选择或 @ 提及该插件。仅在 Codex 添加只供相应客户端使用。
 - 免费 Render 实例会休眠。超时时先打开 [状态页](https://lecturetrace-course-mcp.onrender.com/health)，等 `ok: true` 后重试。
 
 ## 工具与数据边界
 
-九个工具分别用于列出课程（`list_videos`）、读整讲转写（`read_video_transcript`）、按时间取图（`view_keyframe`）、读目录（`get_video_context`）、按时间找单元（`get_video_units`）、读单元原文（`read_video_unit`）、搜关键词（`search_video`）、读指定证据（`read_evidence`）和按证据 ID 取图（`view_slide`）。目录／摘要和搜索片段用于定位，不能代替读取原始转写。
+十个工具分别用于列出课程（`list_videos`）、读完整大纲（`read_video_outline`）、读整讲转写（`read_video_transcript`）、按时间取图（`view_keyframe`）、读目录（`get_video_context`）、按时间找单元（`get_video_units`）、读单元原文（`read_video_unit`）、搜关键词（`search_video`）、读指定证据（`read_evidence`）和按证据 ID 取图（`view_slide`）。目录／摘要和搜索片段用于定位，不能代替读取原始转写。
 
 图片反查 `locate_slide` 已停用；本服务不接收新视频、不重新处理媒体、不播放录像，也不自行调用模型。课件阅读、讲解与资料生成由你使用的 ChatGPT／agent 完成。已提供的讲次以 `list_videos` 实际返回为准；未生成的目录／索引会明确报缺失。
 
@@ -37,7 +37,7 @@
 
 Run Node 22+: `node cloud-mcp/server.mjs`. Set `DATA_ORIGIN` to the existing cloud Site and `DATA_READ_TOKEN` to its separate read-only credential using Render secrets. `PORT` and `RENDER_EXTERNAL_HOSTNAME` come from Render. Never provision the import token, Sites bypass token, local credentials or model keys to this service.
 
-The HTTP adapter permits only `/mcp`, `/health` and a homepage redirect. The copied Worker contract preserves all nine tool behaviors. Its administrative routes cannot be reached through this adapter. Requests are size/concurrency bounded; object keys are allowlisted; upstream redirects are rejected; in-memory data cache is capped at 64 MiB.
+The HTTP adapter permits only `/mcp`, `/health` and a homepage redirect. The copied Worker contract preserves all ten tool behaviors. Its administrative routes cannot be reached through this adapter. Requests are size/concurrency bounded; object keys are allowlisted; upstream redirects are rejected; in-memory data cache is capped at 64 MiB.
 
 The adapter accepts up to 32 MCP requests: four execute while up to 28 wait for at most 20 seconds. Overflow or expired waits return HTTP 429 with `Retry-After: 2`; clients should retry with backoff. Cancelled waits leave the queue. This bounds concurrent JSON parsing and memory use while accommodating short classroom bursts; it does not guarantee sustained capacity for 30 simultaneous users on a free instance. Directly executing 32 requests caused a Node heap exhaustion during a controlled test and is not supported on this plan.
 
@@ -46,3 +46,9 @@ Course data stays in cloud R2, outside Git and the ephemeral Render filesystem. 
 Source: `lecturetrace-mcp/worker/` at the Sites checkout, with the same copied contract tests. When changing shared tools, update this copy and run `node --test cloud-mcp/tests/*.test.mjs`. The separate Python image-matcher service stays suspended on `main`.
 
 Free Render instances sleep when idle; wake `/health` before adding the MCP if the client times out. Do not promise continuous availability or that a successful direct protocol check proves a friend's ChatGPT connection.
+
+## 完整大纲接口
+
+`read_video_outline({"video_id":"…"})` 一次返回已存储的完整 `outline` 对象：所有章节及递归 `children`、完整 `summary`、`start`（视频秒数）、`evidence`、`node_id`，以及 `warnings` 等原有字段。不分页、不截断，不重新生成；没有大纲时明确报错，且不依赖 evidence 是否已生成。
+
+响应含 `source: "generated_outline"`、`complete: true` 和标识导出快照的 `snapshot_version`。这份版本不能传给证据工具；读取引用前用 `get_video_context` 取得 evidence version。大纲是已有生成结果，仍需对照课堂原文和 PPT 核实。

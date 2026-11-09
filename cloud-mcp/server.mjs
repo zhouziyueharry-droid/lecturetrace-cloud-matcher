@@ -27,7 +27,7 @@ export function publicHandler(bucket,hostname){
   const origin=request.headers.get('origin');
   if(origin&&!['https://chatgpt.com','https://chat.openai.com',HOME,'https://'+hostname].includes(origin))return new Response('Invalid origin',{status:403});
   if(url.pathname==='/'&&request.method==='GET')return Response.redirect(HOME,302);
-  if(url.pathname==='/health'&&request.method==='GET')return Response.json({ok:true,tools:9,mode:'public-read-only',image_reverse_lookup:false});
+  if(url.pathname==='/health'&&request.method==='GET')return Response.json({ok:true,tools:10,mode:'public-read-only',image_reverse_lookup:false});
   if(url.pathname!=='/mcp')return new Response('Not found',{status:404});
   if(request.method!=='POST')return new Response(null,{status:405,headers:{allow:'POST'}});
   if(!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))return new Response('Use application/json',{status:415});
@@ -56,6 +56,6 @@ export function serve(handler){
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const bucket=cloudBucket(process.env.DATA_ORIGIN,process.env.DATA_READ_TOKEN);
  const server=serve(publicHandler(bucket,process.env.RENDER_EXTERNAL_HOSTNAME));
- server.listen(Number(process.env.PORT||10000),'0.0.0.0',()=>console.log('Public read-only MCP ready; nine tools.'));
+ server.listen(Number(process.env.PORT||10000),'0.0.0.0',()=>console.log('Public read-only MCP ready; ten tools.'));
  process.on('SIGTERM',()=>{server.close(()=>process.exit(0));setTimeout(()=>process.exit(0),10000).unref();});
 }

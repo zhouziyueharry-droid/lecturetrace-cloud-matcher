@@ -24,6 +24,23 @@ test('lists course and reads Unicode offsets as Python code points',async()=>{
  assert.equal((await rpc('read_video_transcript',{video_id:video.id,text_offset:1})).isError,true);
  assert.equal((await rpc('read_video_transcript',{video_id:video.id,version:frameVersion})).isError,true);
 });
+test('complete outline preserves nested summaries and metadata without needing evidence',async()=>{
+ const outline={chapters:[{node_id:'O1',title:'Chapter',summary:'完整总结😀'.repeat(300),start:2,evidence:['T0001'],children:[{node_id:'O2',title:'Child',summary:'子章节总结',start:3,evidence:['S001.1'],children:[]}]}],warnings:['Verify formula'],admin:{notice:'Course notice'},speech_categories:{teaching:true},revision:2};
+ const e=env();e.objects.set('snapshots/'+hash+'.json',JSON.stringify({...snapshot,sources:{outline}}));
+ const r=await rpc('read_video_outline',{video_id:video.id},e);
+ assert.equal(r.isError,undefined);assert.deepEqual(r.structuredContent.outline,outline);
+ assert.deepEqual(JSON.parse(r.content[0].text),r.structuredContent);
+ assert.equal(r.structuredContent.complete,true);assert.equal(r.structuredContent.snapshot_version,'sha256:'+hash);
+ assert.equal(r.structuredContent.source,'generated_outline');assert.equal(r.structuredContent.course_title,'AI6102');
+ assert.equal((await rpc('read_video_outline',{video_id:video.id,offset:1},e)).isError,true);
+});
+test('missing or malformed outline is an explicit error rather than an empty fabricated outline',async()=>{
+ const missing=await rpc('read_video_outline',{video_id:video.id});assert.equal(missing.isError,true);assert.match(missing.content[0].text,/outline.json is unavailable/);
+ const e=env();e.objects.set('snapshots/'+hash+'.json',JSON.stringify({...snapshot,sources:{outline:{chapters:'invalid'}}}));
+ assert.equal((await rpc('read_video_outline',{video_id:video.id},e)).isError,true);
+ e.objects.set('snapshots/'+hash+'.json',JSON.stringify({...snapshot,sources:{outline:{chapters:[]}}}));
+ assert.deepEqual((await rpc('read_video_outline',{video_id:video.id},e)).structuredContent.outline,{chapters:[]});
+});
 test('keyframes preserve overlap, half-open boundaries, gaps and independent versions',async()=>{
  const r=await rpc('view_keyframe',{video_id:video.id,timestamp:5});
  assert.equal(r.structuredContent.total_matches,2);assert.equal(r.structuredContent.next_offset,1);assert.equal(r.content[1].type,'image');
@@ -52,7 +69,7 @@ test('disabled matcher is not advertised and cannot run even with stale configur
   const r=await rpc('locate_slide',{video_id:video.id,image_base64:'AAAA'},e);
   assert.equal(r.isError,true);assert.match(r.content[0].text,/暂时停用/);assert.equal(fetched,false);
   const list=await worker.fetch(new Request('https://example.test/mcp',{method:'POST',body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/list'})}),e);
-  const names=(await list.json()).result.tools.map(t=>t.name);assert.equal(names.length,9);assert.ok(!names.includes('locate_slide'));
+  const names=(await list.json()).result.tools.map(t=>t.name);assert.equal(names.length,10);assert.ok(names.includes('read_video_outline'));assert.ok(!names.includes('locate_slide'));
   assert.equal((await worker.fetch(new Request('https://example.test/matcher/images/'+imageHash,{headers:{'x-matcher-token':'old-token'}}),e)).status,410);
   assert.equal((await worker.fetch(new Request('https://example.test/health'),e)).status,200);
  }finally{globalThis.fetch=original;}

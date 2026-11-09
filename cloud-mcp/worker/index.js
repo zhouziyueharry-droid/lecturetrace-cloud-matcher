@@ -20,12 +20,14 @@ Recommended study workflow (when the user wants to learn a whole lecture with a 
 4. For targeted lookup use get_video_context/search_video to locate material, then read_video_unit/read_evidence for the original relevant evidence. get_video_units locates appearance units at a known timestamp. Chapter/unit summaries and search excerpts are navigation, not proof that original speech has been read. Missing evidence/outline does not prevent direct transcript/keyframe reads.
 5. Use view_keyframe at verified transcript timestamps to inspect existing screenshots, or view_slide when an evidence page/unit ID is known. PDF page numbers, evidence IDs and video times are different: do not assume a one-to-one mapping. Match PDF titles/keywords to the transcript and verify the image when needed. Screenshots are representative stored frames, not freshly extracted exact-time video frames.
 6. Original ASR may be wrong. Transcript, keyframe and evidence versions are independent; use the correct tool's version for continuation and follow pagination. T is original ASR; S page text and S/N section summaries are generated content. Disclose uncertainty, missing material and unread portions.
+For an existing complete lecture outline, call read_video_outline with video_id. It returns the stored outline unchanged, including chapter summaries, recursive children, timestamps, evidence references and warnings; no model runs and no text is truncated. This is a previously generated outline, not original speech or a guarantee of exam coverage. Its snapshot_version is not the evidence version: obtain the latter via get_video_context before read_evidence.
 Image reverse lookup (locate_slide) is disabled. Do not attempt it or imply that uploading a PDF/image automatically locates it in a video. Use text/time-based lookup and image verification instead.`;
 const str = {type:'string'}, offset = {type:'integer',minimum:0,default:0};
 const vid = {type:'string',pattern:VIDEO.source}, ver = {type:'string',pattern:VERSION.source};
 const tools = [
  {name:'list_videos',description:'从这里开始：获取本 MCP 的用途、使用指导（service_guide）和可用 AI6102 课程列表。服务从 LectureTrace 拆出，数据由原项目处理，临时供 AI6102 同学复习及整理开卷资料。建议先上传老师 PPT／PDF，由同学说明 Week 与章节对应关系，再用 MCP 补充课堂讲解，参考老师的思路讲解或生成资料；不建议只靠 MCP 复习。Week 不是章节号。返回原处理状态，后续阶段失败不代表 ASR 缺失。',properties:{offset},required:[]},
  {name:'read_video_transcript',description:'Read original full ASR with [start-end] seconds, up to 160000 characters. Continue next_text_offset with this tool’s version. No translation or generated summary.',properties:{video_id:vid,text_offset:offset,version:ver},required:['video_id']},
+ {name:'read_video_outline',description:'读取这讲已生成的完整大纲，原样返回所有章节及递归子章节、完整 summary、start 时间、evidence 引用、node_id 和附加元数据（如 warnings）。只需 video_id，一次返回，不分页、不截断、不重新生成。大纲是生成的导航资料，不能代替老师原文；读取引用前先用 get_video_context 获取 evidence version，不要使用本工具的 snapshot_version。',properties:{video_id:vid},required:['video_id']},
  {name:'view_keyframe',description:'View one stored JPEG covering timestamp in seconds. Half-open intervals, no guesses across gaps. Continue overlapping images with next_offset and this tool’s own version.',properties:{video_id:vid,timestamp:{type:'number',minimum:0},offset,version:ver},required:['video_id','timestamp']},
  {name:'get_video_context',description:'Read chapter headings and unit summaries with timeline. Returns the evidence version required by navigation tools. Navigation is not proof of reading original speech.',properties:{video_id:vid,offset},required:['video_id']},
  {name:'get_video_units',description:'Find continuous appearance units at seconds, including display/speech overlaps. Summaries only; read_video_unit for original speech.',properties:{video_id:vid,version:ver,timestamp:{type:'number',minimum:0},offset},required:['video_id','version','timestamp']},
@@ -79,6 +81,11 @@ async function callTool(name,args,env){
  }
  const video=videos.find(v=>v.id===args.video_id);check(video,'Video not found');
  const snapshot=await stored(env.BUCKET,'snapshots/'+video.snapshot+'.json');
+ if(name==='read_video_outline'){
+  const outline=snapshot.sources?.outline;
+  check(object(outline)&&Array.isArray(outline.chapters),'outline.json is unavailable; finish local outline processing and import this course again');
+  return result({video_id:video.id,title:video.title,course_title:video.course_title,snapshot_version:'sha256:'+video.snapshot,source:'generated_outline',outline,complete:true,note:'Complete stored outline, unchanged and untruncated; previously generated content, not original speech. Chapter times are video seconds, not PPT page numbers. Verify summaries against the transcript/PPT. Use get_video_context to obtain the evidence version before reading referenced evidence.'});
+ }
  if(!['read_video_transcript','view_keyframe'].includes(name)){
   const answer=readNavigation(name,args,video,snapshot,check);let image;
   if(answer.imageHash){const item=await env.BUCKET.get('images/'+answer.imageHash);check(item,'Evidence screenshot is missing');image=base64(new Uint8Array(await item.arrayBuffer()));}
@@ -182,8 +189,8 @@ export default {async fetch(request,env){
   if(!object(msg)||msg.jsonrpc!=='2.0'||typeof msg.method!=='string'||('id'in msg&&!(typeof msg.id==='string'||typeof msg.id==='number'||msg.id===null)))return json({jsonrpc:'2.0',id:null,error:{code:-32600,message:'Invalid request'}},400);
   if(!('id'in msg))return new Response(null,{status:202});
   let answer;
-  if(msg.method==='server/discover')answer={supportedVersions:['2026-07-28'],capabilities:{tools:{}},serverInfo:{name:'LectureTrace Courses',version:'1.0.0'},instructions};
-  else if(msg.method==='initialize')answer={protocolVersion:['2024-11-05','2025-03-26','2025-06-18','2025-11-25'].includes(msg.params?.protocolVersion)?msg.params.protocolVersion:'2025-11-25',capabilities:{tools:{}},serverInfo:{name:'LectureTrace Courses',version:'1.0.0'},instructions};
+  if(msg.method==='server/discover')answer={supportedVersions:['2026-07-28'],capabilities:{tools:{}},serverInfo:{name:'LectureTrace Courses',version:'1.1.0'},instructions};
+  else if(msg.method==='initialize')answer={protocolVersion:['2024-11-05','2025-03-26','2025-06-18','2025-11-25'].includes(msg.params?.protocolVersion)?msg.params.protocolVersion:'2025-11-25',capabilities:{tools:{}},serverInfo:{name:'LectureTrace Courses',version:'1.1.0'},instructions};
   else if(msg.method==='ping')answer={};
   else if(msg.method==='tools/list')answer={tools:available};
   else if(msg.method==='tools/call'){

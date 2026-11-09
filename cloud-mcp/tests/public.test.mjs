@@ -8,7 +8,7 @@ test('anonymous HTTP MCP works and write/admin, bad origins and oversized reques
  const url='http://127.0.0.1:'+server.address().port;
  const rpc=async(method,params)=>{const r=await fetch(url+'/mcp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});assert.equal(r.status,200);return r.json();};
  assert.match((await rpc('initialize',{protocolVersion:'2025-11-25'})).result.instructions,/下一部分/);
- const tools=(await rpc('tools/list')).result.tools;assert.equal(tools.length,9);assert(!tools.some(t=>t.name==='locate_slide'));
+ const tools=(await rpc('tools/list')).result.tools;assert.equal(tools.length,10);assert(!tools.some(t=>t.name==='locate_slide'));
  assert.deepEqual((await rpc('tools/call',{name:'list_videos',arguments:{}})).result.structuredContent.videos,[]);
  assert.equal(reads,1);
  assert.equal((await fetch(url+'/admin/courses/test',{method:'PUT'})).status,404);
