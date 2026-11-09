@@ -32,7 +32,7 @@ def asset(kind, digest):
     origin = os.environ['SITE_ORIGIN'].rstrip('/')
     if not re.fullmatch(r'https://[a-z0-9.-]+\.chatgpt\.site', origin):
         raise ValueError('Invalid configured Site origin')
-    headers = {'X-Matcher-Token': os.environ['MATCHER_TOKEN']}
+    headers = {'X-Matcher-Token': os.environ['MATCHER_TOKEN'], 'User-Agent': 'LectureTraceMatcher/1.0'}
     if os.environ.get('SITES_SERVICE_TOKEN'):
         headers['OAI-Sites-Authorization'] = 'Bearer ' + os.environ['SITES_SERVICE_TOKEN']
     request = Request(origin + '/matcher/' + kind + '/' + digest, headers=headers)
