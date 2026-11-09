@@ -1,4 +1,4 @@
-"""Vendored LectureTrace slide_locator; only config adapter and cache size differ."""
+"""Vendored LectureTrace slide_locator with a cloud configuration adapter."""
 from __future__ import annotations
 
 import base64
@@ -57,7 +57,7 @@ def _features(raw, params):
     return np.float32([p.pt for p in points]).reshape(-1, 2), descriptors, gray.shape
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=256)
 def _stored_features(path, modified_ns, size, params):
     # Bounded RAM cache; stat + parameters invalidate it without touching course files.
     if size > params.max_image_bytes:
