@@ -6,6 +6,20 @@ const HOME='https://lecturetrace-ai6102-mcp-20261108.zhouziyueharry.chatgpt.site
 const MAX_BODY=65536;
 export function publicHandler(bucket,hostname){
  let active=0;
+ const waiting=[];
+ const busy=()=>new Response('Server busy; retry shortly',{status:429,headers:{'retry-after':'2'}});
+ async function acquire(signal){
+  if(signal.aborted)return false;
+  if(active<4){active++;return true;}
+  if(waiting.length>=28)return false;
+  return new Promise(resolve=>{
+   const finish=ok=>{clearTimeout(timer);signal.removeEventListener('abort',cancel);resolve(ok);};
+   const cancel=()=>{const index=waiting.indexOf(finish);if(index>=0){waiting.splice(index,1);finish(false);}};
+   const timer=setTimeout(cancel,20000);
+   waiting.push(finish);signal.addEventListener('abort',cancel,{once:true});
+  });
+ }
+ function release(){const next=waiting.shift();if(next)next(true);else active--;}
  const hosts=new Set([hostname,'localhost','127.0.0.1'].filter(Boolean));
  return async function(request){
   const url=new URL(request.url),host=(request.headers.get('host')||url.host).split(':')[0];
@@ -18,14 +32,14 @@ export function publicHandler(bucket,hostname){
   if(request.method!=='POST')return new Response(null,{status:405,headers:{allow:'POST'}});
   if(!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))return new Response('Use application/json',{status:415});
   if(Number(request.headers.get('content-length')||0)>MAX_BODY)return new Response('Request too large',{status:413});
-  if(active>=32)return new Response('Server busy; retry shortly',{status:429,headers:{'retry-after':'2'}});
-  active++;
+  // Bound simultaneous JSON parsing on the free instance; absorb short classroom bursts in a bounded queue.
+  if(!await acquire(request.signal))return busy();
   try{
    let size=0;const chunks=[];
    if(request.body)for await(const chunk of request.body){size+=chunk.length;if(size>MAX_BODY)return new Response('Request too large',{status:413});chunks.push(chunk);}
    // Only MCP is forwarded: the imported worker's admin/data routes and secrets are unreachable.
    return await worker.fetch(new Request(url,{method:'POST',headers:{'content-type':'application/json'},body:Buffer.concat(chunks,size)}),{BUCKET:bucket});
-  }catch{return new Response('Request failed',{status:503});}finally{active--;}
+  }catch{return new Response('Request failed',{status:503});}finally{release();}
  };
 }
 export function serve(handler){
@@ -37,7 +51,7 @@ export function serve(handler){
    res.end(Buffer.from(await response.arrayBuffer()));
   }catch{if(!res.headersSent)res.writeHead(503);res.end('Request failed');}
  });
- server.maxConnections=64;server.timeout=25000;return server;
+ server.maxConnections=64;server.timeout=45000;return server;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const bucket=cloudBucket(process.env.DATA_ORIGIN,process.env.DATA_READ_TOKEN);

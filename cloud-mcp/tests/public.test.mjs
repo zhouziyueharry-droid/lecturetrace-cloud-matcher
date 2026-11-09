@@ -19,19 +19,36 @@ test('anonymous HTTP MCP works and write/admin, bad origins and oversized reques
  assert.equal((await rpc('tools/call',{name:'locate_slide',arguments:{}})).result.isError,true);
  assert.equal(reads,1);
 });
-test('admits 32 concurrent MCP reads, rejects overflow and releases capacity', {timeout:3000}, async()=>{
+test('accepts 32 reads but executes only four at once, rejects overflow and releases capacity', {timeout:3000}, async()=>{
  let release,allStarted,reads=0;
  const gate=new Promise(resolve=>{release=resolve;});
  const started=new Promise(resolve=>{allStarted=resolve;});
- const handler=publicHandler({list:async()=>{if(++reads===32)allStarted();await gate;return {objects:[],truncated:false};}},'course.onrender.com');
+ const handler=publicHandler({list:async()=>{if(++reads===4)allStarted();await gate;return {objects:[],truncated:false};}},'course.onrender.com');
  const request=()=>handler(new Request('https://course.onrender.com/mcp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'list_videos',arguments:{}}})}));
  const admitted=Array.from({length:32},request);
  try{
   await started;
-  const overflow=await request();assert.equal(overflow.status,429);assert.equal(overflow.headers.get('retry-after'),'2');assert.equal(reads,32);
+  const overflow=await request();assert.equal(overflow.status,429);assert.equal(overflow.headers.get('retry-after'),'2');assert.equal(reads,4);
  }finally{release();}
  for(const response of await Promise.all(admitted)){assert.equal(response.status,200);assert.equal((await response.json()).result.isError,undefined);}
  assert.equal((await request()).status,200);assert.equal(reads,33);
+});
+
+test('cancelled waiting requests free queue space without executing', {timeout:3000}, async()=>{
+ let release,allStarted,reads=0;
+ const gate=new Promise(resolve=>{release=resolve;});const started=new Promise(resolve=>{allStarted=resolve;});
+ const handler=publicHandler({list:async()=>{if(++reads===4)allStarted();await gate;return {objects:[],truncated:false};}},'course.onrender.com');
+ const request=signal=>handler(new Request('https://course.onrender.com/mcp',{method:'POST',signal,headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'list_videos',arguments:{}}})}));
+ const running=Array.from({length:4},()=>request());await started;
+ const controller=new AbortController();const cancelled=request(controller.signal);
+ const queued=Array.from({length:27},()=>request());
+ try{
+  assert.equal((await request()).status,429);
+  controller.abort();assert.equal((await cancelled).status,429);
+  queued.push(request());assert.equal(reads,4);
+ }finally{release();}
+ for(const response of await Promise.all([...running,...queued]))assert.equal(response.status,200);
+ assert.equal(reads,32);
 });
 
 test('cloud adapter is read-only, restricts keys and caches immutable objects',async()=>{
