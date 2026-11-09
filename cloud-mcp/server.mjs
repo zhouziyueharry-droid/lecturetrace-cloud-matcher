@@ -18,7 +18,7 @@ export function publicHandler(bucket,hostname){
   if(request.method!=='POST')return new Response(null,{status:405,headers:{allow:'POST'}});
   if(!request.headers.get('content-type')?.toLowerCase().startsWith('application/json'))return new Response('Use application/json',{status:415});
   if(Number(request.headers.get('content-length')||0)>MAX_BODY)return new Response('Request too large',{status:413});
-  if(active>=8)return new Response('Server busy; retry shortly',{status:429,headers:{'retry-after':'2'}});
+  if(active>=32)return new Response('Server busy; retry shortly',{status:429,headers:{'retry-after':'2'}});
   active++;
   try{
    let size=0;const chunks=[];

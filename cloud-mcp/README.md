@@ -39,6 +39,8 @@ Run Node 22+: `node cloud-mcp/server.mjs`. Set `DATA_ORIGIN` to the existing clo
 
 The HTTP adapter permits only `/mcp`, `/health` and a homepage redirect. The copied Worker contract preserves all nine tool behaviors. Its administrative routes cannot be reached through this adapter. Requests are size/concurrency bounded; object keys are allowlisted; upstream redirects are rejected; in-memory data cache is capped at 64 MiB.
 
+The adapter admits up to 32 in-flight MCP requests. Overflow returns HTTP 429 with `Retry-After: 2`; clients should retry with backoff. This allows larger classroom bursts without unbounded request accumulation, but is not a guarantee of sustained capacity for 30 simultaneous users on a free instance.
+
 Course data stays in cloud R2, outside Git and the ephemeral Render filesystem. Existing authenticated imports publish a course manifest only after all images and snapshots are present. New manifests become visible within 60 seconds; content-addressed images/snapshots are immutable. No live access to the owner's computer is required.
 
 Source: `lecturetrace-mcp/worker/` at the Sites checkout, with the same copied contract tests. When changing shared tools, update this copy and run `node --test cloud-mcp/tests/*.test.mjs`. The separate Python image-matcher service stays suspended on `main`.
